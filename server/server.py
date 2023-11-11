@@ -2,6 +2,7 @@ import http.server
 import socketserver
 import threading
 import time
+import logging
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
@@ -10,6 +11,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        logging.info("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
         super().do_GET()
 
     def do_POST(self):
@@ -27,13 +29,12 @@ def start_server():
     HOST_NAME = "localhost"
     PORT_NUMBER = 8000
     server_address = (HOST_NAME, PORT_NUMBER)
-    num_threads = 4
 
     httpd = ThreadedHTTPServer(server_address, CustomRequestHandler)
-    httpd.num_threads = num_threads
 
     try:
         print("Starting HTTP server on", server_address)
+        logging.basicConfig(level=logging.INFO)
         http_thread = threading.Thread(target=httpd.serve_forever)
         http_thread.start()
 
