@@ -1,12 +1,18 @@
 import http.server
 import socketserver
 import threading
+import time
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
-    def handle_GET(self):
-        super().handle_GET()
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/html')
+        self.end_headers()
 
-    def handle_POST(self):
+    def do_GET(self):
+        super().do_GET()
+
+    def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         # Handle POST data as needed
@@ -18,7 +24,9 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     pass
 
 def start_server():
-    server_address = ('localhost', 8000)
+    HOST_NAME = "localhost"
+    PORT_NUMBER = 8000
+    server_address = (HOST_NAME, PORT_NUMBER)
     num_threads = 4
 
     httpd = ThreadedHTTPServer(server_address, CustomRequestHandler)
@@ -33,6 +41,7 @@ def start_server():
 
     except KeyboardInterrupt:
         print("Shutting down the server.")
+        print(time.asctime(), 'Server DOWN - %s:%s' % (HOST_NAME, PORT_NUMBER))
         httpd.shutdown()
 
 if __name__ == "__main__":
