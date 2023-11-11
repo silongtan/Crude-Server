@@ -3,6 +3,7 @@ import socketserver
 import threading
 import time
 import logging
+import os
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_HEAD(self):
@@ -11,10 +12,19 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        logging.info("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
-        super().do_GET()
+        # logging.info("GET request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
+        if self.path == '/':
+            self.path = '/index.html'
+
+        # Check if the requested file exists
+        file_path = os.path.join(os.getcwd(), self.path[1:])
+        if os.path.exists(file_path):
+            super().do_GET()
+        else:
+            self.send_error(404, 'File Not Found')
 
     def do_POST(self):
+        # logging.info("POST request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length).decode('utf-8')
         # Handle POST data as needed
