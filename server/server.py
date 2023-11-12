@@ -3,6 +3,7 @@ import http.server
 import socketserver
 import ssl
 import os
+import time
 
 ROOT_DIR = os.path.dirname(__file__)
 SUBDIRECTORIES = ['favicon.ico']
@@ -12,6 +13,26 @@ for root, dirs, files in os.walk(ROOT_DIR):
             SUBDIRECTORIES.append(dir)
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
+
+    RATE_LIMIT_PERIOD = 60
+    RATE_LIMIT_REQUESTS = 5
+
+    def __init__(self, *args, **kwargs):
+        self.client_last_request_time = {}
+        super().__init__(*args, **kwargs)
+
+    def can_process_request(self, client_address):
+        current_time = time.time()
+        if client_address not in self.client_last_request_time:
+            self.client_last_request_time[client_address] = current_time
+        # Check if the client has exceeded the rate limit
+        if current_time - self.client_last_request_time[client_address] < self.RATE_LIMIT_PERIOD:
+            return False
+        else:
+            # Reset the last request time for the client
+            self.client_last_request_time[client_address] = current_time
+            return True
+
     def do_GET(self):
         path = '/' if self.path == '/' else str(self.path).lstrip('/').rstrip('/')
         legal = (path == '/')
@@ -23,14 +44,26 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         if not legal:
             self.send_error(403, 'Unauthorized Access')
         else:
-            super().do_GET()
+            client_address = self.client_address[0]
+            if self.can_process_request(client_address):
+                super().do_GET()
+            else:
+                self.send_response(429)  # HTTP 429 Too Many Requests
+                self.end_headers()
+                self.wfile.write(b"Rate limit exceeded. Please wait and try again.")
 
     def do_POST(self):
         # logging.info("POST request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
-        if self.path == '/upload':
-            self.handle_file_upload()
+        client_address = self.client_address[0]
+        if self.can_process_request(client_address):
+            if self.path == '/upload':
+                self.handle_file_upload()
+            else:
+                self.handle_post()
         else:
-            self.handle_post()
+            self.send_response(429)  # HTTP 429 Too Many Requests
+            self.end_headers()
+            self.wfile.write(b"Rate limit exceeded. Please wait and try again.")
 
     def handle_post(self):
         # logging.info("POST request,\nPath: %s\nHeaders:\n%s\n", str(self.path), str(self.headers))
