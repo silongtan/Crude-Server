@@ -1,14 +1,15 @@
 import cgi
 import http.server
 import socketserver
-import logging
+import ssl
 import os
 
 ROOT_DIR = os.path.dirname(__file__)
-SUBDIRECTORIES = []
+SUBDIRECTORIES = ['favicon.ico']
 for root, dirs, files in os.walk(ROOT_DIR):
     for dir in dirs:
-        SUBDIRECTORIES.append(dir)
+        if dir != 'certificates':
+            SUBDIRECTORIES.append(dir)
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -81,8 +82,13 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
 def start_server():
     server_address = ('localhost', 8000)
     httpd = ThreadedHTTPServer(server_address, CustomRequestHandler)
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain('certificates/certificate.pem', 'certificates/key.pem')
+    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+
     try:
-        print(f"Server started at http://{server_address[0]}:{server_address[1]}")
+        print(f"Server started at https://{server_address[0]}:{server_address[1]}")
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down the server...")
