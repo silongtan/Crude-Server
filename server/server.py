@@ -22,6 +22,10 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def can_process_request(self, client_address):
         current_time = time.time()
+
+        # Clean up old client entries
+        self.cleanup_old_clients(current_time)
+        
         if client_address not in self.client_last_request_time:
             self.client_last_request_time[client_address] = current_time
         # Check if the client has exceeded the rate limit
@@ -31,6 +35,12 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
             # Reset the last request time for the client
             self.client_last_request_time[client_address] = current_time
             return True
+        
+    def cleanup_old_clients(self, current_time):
+        # Remove client entries older than CLIENT_CLEANUP_INTERVAL
+        for client_address, last_request_time in list(self.client_last_request_time.items()):
+            if current_time - last_request_time > self.CLIENT_CLEANUP_INTERVAL:
+                del self.client_last_request_time[client_address]
 
     def do_GET(self):
         path = '/' if self.path == '/' else str(self.path).lstrip('/').rstrip('/')
