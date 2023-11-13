@@ -4,6 +4,7 @@ import socketserver
 import ssl
 import os
 import time
+import threading
 
 ROOT_DIR = os.path.dirname(__file__)
 SUBDIRECTORIES = ['favicon.ico']
@@ -12,11 +13,14 @@ for root, dirs, files in os.walk(ROOT_DIR):
         if dir != 'certificates':
             SUBDIRECTORIES.append(dir)
 
+CLIENT_LAST_REQUEST_TIME = dict()
+
+RATE_LIMIT_LOCK = threading.Lock()
+
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
 
-    RATE_LIMIT_PERIOD = 60
+    RATE_LIMIT_PERIOD = 1
     RATE_LIMIT_REQUESTS = 5
-    CLIENT_CLEANUP_INTERVAL = 120
 
     MAX_GET_URL_LENGTH = 1024
 
@@ -25,26 +29,21 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, **kwargs)
 
     def can_process_request(self, client_address):
+        print(CLIENT_LAST_REQUEST_TIME)
         current_time = time.time()
+        with RATE_LIMIT_LOCK:
+            if client_address not in CLIENT_LAST_REQUEST_TIME:
+                CLIENT_LAST_REQUEST_TIME[client_address] = []
 
-        # Clean up old client entries
-        self.cleanup_old_clients(current_time)
+            # Filter out requests outside the time window
+            CLIENT_LAST_REQUEST_TIME[client_address] = [timestamp for timestamp in CLIENT_LAST_REQUEST_TIME[client_address] 
+                                                        if current_time - timestamp < self.RATE_LIMIT_PERIOD]
 
-        if client_address not in self.client_last_request_time:
-            self.client_last_request_time[client_address] = current_time
-        # Check if the client has exceeded the rate limit
-        if current_time - self.client_last_request_time[client_address] == 0:
-            return True
-        if current_time - self.client_last_request_time[client_address] < self.RATE_LIMIT_PERIOD:
-            return False
-        self.client_last_request_time[client_address] = current_time
-        return True
-        
-    def cleanup_old_clients(self, current_time):
-        # Remove client entries older than CLIENT_CLEANUP_INTERVAL
-        for client_address, last_request_time in list(self.client_last_request_time.items()):
-            if current_time - last_request_time > self.CLIENT_CLEANUP_INTERVAL:
-                del self.client_last_request_time[client_address]
+            if len(CLIENT_LAST_REQUEST_TIME[client_address]) < self.RATE_LIMIT_REQUESTS:
+                CLIENT_LAST_REQUEST_TIME[client_address].append(current_time)
+                return True
+            else:
+                return False
 
     def do_GET(self):
         client_address = self.client_address[0]
