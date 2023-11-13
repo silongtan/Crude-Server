@@ -88,7 +88,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(f"Received POST data: {post_data}".encode('utf-8'))
-
+        
     def handle_file_upload(self):
         UPLOAD_DIR = os.path.join(ROOT_DIR, 'assets')
         content_type, _ = cgi.parse_header(self.headers.get('Content-Type'))
