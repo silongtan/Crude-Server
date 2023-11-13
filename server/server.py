@@ -33,12 +33,12 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         if client_address not in self.client_last_request_time:
             self.client_last_request_time[client_address] = current_time
         # Check if the client has exceeded the rate limit
+        if current_time - self.client_last_request_time[client_address] == 0:
+            return True
         if current_time - self.client_last_request_time[client_address] < self.RATE_LIMIT_PERIOD:
             return False
-        else:
-            # Reset the last request time for the client
-            self.client_last_request_time[client_address] = current_time
-            return True
+        self.client_last_request_time[client_address] = current_time
+        return True
         
     def cleanup_old_clients(self, current_time):
         # Remove client entries older than CLIENT_CLEANUP_INTERVAL
