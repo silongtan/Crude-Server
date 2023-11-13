@@ -15,6 +15,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     RATE_LIMIT_PERIOD = 60
     RATE_LIMIT_REQUESTS = 5
+    CLIENT_CLEANUP_INTERVAL = 120
 
     def __init__(self, *args, **kwargs):
         self.client_last_request_time = {}
@@ -25,7 +26,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Clean up old client entries
         self.cleanup_old_clients(current_time)
-        
+
         if client_address not in self.client_last_request_time:
             self.client_last_request_time[client_address] = current_time
         # Check if the client has exceeded the rate limit
