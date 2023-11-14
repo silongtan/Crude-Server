@@ -5,6 +5,10 @@ import ssl
 import os
 import time
 import threading
+import hashlib
+import mimetypes
+import argparse
+from collections import OrderedDict
 
 ROOT_DIR = os.path.dirname(__file__)
 SUBDIRECTORIES = ['favicon.ico']
@@ -16,11 +20,39 @@ for root, dirs, files in os.walk(ROOT_DIR):
 CLIENT_LAST_REQUEST_TIME = dict()
 
 RATE_LIMIT_LOCK = threading.Lock()
+CACHE_LOCK = threading.Lock()
+
+class LRUCache:
+    def __init__(self, capacity: int = 100):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+
+    def get(self, key):
+        with CACHE_LOCK:
+            if key not in self.cache:
+                return None
+            self.cache.move_to_end(key)
+            return self.cache[key]
+
+    def set(self, key, value):
+        with CACHE_LOCK:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+            else:
+                if len(self.cache) >= self.capacity:
+                    self.cache.popitem(last=False)
+            self.cache[key] = value
+
+    def generate_key(self, path):
+        return hashlib.md5(path.encode()).hexdigest()
+
+CACHE = LRUCache(capacity=3)
+USE_CACHE = True
 
 class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     RATE_LIMIT_PERIOD = 1
-    RATE_LIMIT_REQUESTS = 5
+    RATE_LIMIT_REQUESTS = 7
 
     MAX_GET_URL_LENGTH = 1024
 
@@ -28,8 +60,20 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.client_last_request_time = {}
         super().__init__(*args, **kwargs)
 
+    def send_head(self):
+        if USE_CACHE:
+            path = self.translate_path(self.path)
+            # divided by 1024 as getsize() returns values in bytes
+            if os.path.isfile(path) and ((os.path.getsize(path) / 1024) > 500):
+                cache_key = CACHE.generate_key(self.path)
+                if not CACHE.get(cache_key):
+                    with open(path, 'rb') as f:
+                        content = f.read()
+                        mime_type, _ = mimetypes.guess_type(path)
+                        CACHE.set(cache_key, {'data': content, 'mime': mime_type})
+        return super().send_head()
+
     def can_process_request(self, client_address):
-        print(CLIENT_LAST_REQUEST_TIME)
         current_time = time.time()
         with RATE_LIMIT_LOCK:
             if client_address not in CLIENT_LAST_REQUEST_TIME:
@@ -66,8 +110,18 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         if not legal:
             self.send_error(403, 'Unauthorized Access')
             self.end_headers()
-        else:
-            super().do_GET()
+            return
+        if USE_CACHE:
+            cache_key = CACHE.generate_key(self.path)
+            cached_response = CACHE.get(cache_key)
+
+            if cached_response:
+                self.send_response(200)
+                self.send_header('Content-type', cached_response['mime'])
+                self.end_headers()
+                self.wfile.write(cached_response['data'])
+                return
+        super().do_GET()
 
     def do_POST(self):
         client_address = self.client_address[0]
@@ -133,7 +187,9 @@ class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     pass
 
-def start_server():
+def start_server(cached: bool = True):
+    USE_CACHE = cached
+
     server_address = ('localhost', 8000)
     httpd = ThreadedHTTPServer(server_address, CustomRequestHandler)
 
@@ -150,5 +206,11 @@ def start_server():
         httpd.server_close()
         print("Server successfully shut down.")
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Start a multi-threaded HTTP server.')
+    parser.add_argument('--cached', action='store_true', help='Enable cache support.')
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    start_server()
+    args = parse_arguments()
+    start_server(args.cached)
