@@ -105,6 +105,10 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             return
         path = '/' if self.path == '/' else str(self.path).lstrip('/').rstrip('/')
+        if not os.path.exists(path):
+            self.send_error(404, "File Not Found")
+            logging.error(f"404: File Not Found, sender: {self.client_address}, path: {self.path}")
+            return
         legal = (path == '/')
         if not legal:
             for subdir in SUBDIRECTORIES:
