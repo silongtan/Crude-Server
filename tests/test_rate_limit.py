@@ -9,7 +9,7 @@ def send_request(url):
 
 def main():
     url = "https://localhost:8000"  # Replace with your server's URL
-    requests_count = 7
+    requests_count = 10
 
     with ProcessPoolExecutor() as executor:
         futures = [executor.submit(send_request, url) for _ in range(requests_count)]

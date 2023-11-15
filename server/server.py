@@ -9,6 +9,7 @@ import hashlib
 import mimetypes
 import argparse
 from collections import OrderedDict
+import logging
 
 ROOT_DIR = os.path.dirname(__file__)
 SUBDIRECTORIES = ['favicon.ico']
@@ -90,14 +91,17 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return False
 
     def do_GET(self):
+        # logging.debug("Detailed information about the incoming request")
         client_address = self.client_address[0]
         if not self.can_process_request(client_address):
             self.send_response(429)  # HTTP 429 Too Many Requests
             self.end_headers()
             self.wfile.write(b"Rate limit exceeded. Please wait and try again.")
+            logging.error(f"429: Too many GET requests, sender: {self.client_address}, path: {self.path}")
             return
         if len(self.path) > self.MAX_GET_URL_LENGTH:
             self.send_error(414, "URI Too Long")
+            logging.error(f"414: URL Too Long, sender: {self.client_address}, path: {self.path}")
             self.end_headers()
             return
         path = '/' if self.path == '/' else str(self.path).lstrip('/').rstrip('/')
@@ -109,6 +113,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
                     break
         if not legal:
             self.send_error(403, 'Unauthorized Access')
+            logging.error(f"403: Unauthorized Access, sender: {self.client_address}, path: {self.path}")
             self.end_headers()
             return
         if USE_CACHE:
@@ -121,6 +126,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(cached_response['data'])
                 return
+        logging.info(f"200: Received GET request from {self.client_address}, path: {self.path}")
         super().do_GET()
 
     def do_POST(self):
@@ -134,6 +140,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(429)  # HTTP 429 Too Many Requests
             self.end_headers()
             self.wfile.write(b"Rate limit exceeded. Please wait and try again.")
+            logging.error(f"429: Too many POST requests, sender: {self.client_address}, path: {self.path}")
 
     def handle_post(self):
         content_length = int(self.headers['Content-Length'])
@@ -142,6 +149,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(f"Received POST data: {post_data}".encode('utf-8'))
+        logging.info(f"200: Received POST request from {self.client_address}, data: {post_data}, path: {self.path}")
         
     def handle_file_upload(self):
         UPLOAD_DIR = os.path.join(ROOT_DIR, 'assets')
@@ -167,29 +175,49 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(f"File '{uploaded_file.filename}' uploaded successfully.".encode('utf-8'))
+                logging.info(f"200: File '{uploaded_file.filename}' uploaded successfully, sender: {self.client_address}, path: {self.path}")
             else:
                 self.send_response(400)
                 self.end_headers()
                 self.wfile.write(b"Bad Request: No file uploaded.")
+                logging.error(f"400: No file uploaded, sender: {self.client_address}, path: {self.path}")
         else:
             self.send_response(400)
             self.end_headers()
             self.wfile.write(b"Bad Request: Invalid content type for file upload.")
+            logging.error(f"400: Invalid content type for file upload, sender: {self.client_address}, path: {self.path}")
 
     # disable some http methods which will not be implemented for this project
     def do_PUT(self):
         self.send_error(405)
+        logging.error(f"405: Not supported (PUT), sender: {self.client_address}, path: {self.path}")
 
     def do_DELETE(self):
         self.send_error(405)
+        logging.error(f"405: Not supported (DELETE), sender: {self.client_address}, path: {self.path}")
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
     daemon_threads = True
     pass
 
+def config_logging():
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    file_handler = logging.FileHandler('server.log')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
 def start_server(cached: bool = True):
     USE_CACHE = cached
-
+    config_logging()
     server_address = ('localhost', 8000)
     httpd = ThreadedHTTPServer(server_address, CustomRequestHandler)
 
@@ -199,12 +227,14 @@ def start_server(cached: bool = True):
 
     try:
         print(f"Server started at https://{server_address[0]}:{server_address[1]}")
+        logging.info(f"Server started at https://{server_address[0]}:{server_address[1]}")
         httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down the server...")
         httpd.shutdown()
         httpd.server_close()
         print("Server successfully shut down.")
+        logging.info("Server shut down.")
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='Start a multi-threaded HTTP server.')
