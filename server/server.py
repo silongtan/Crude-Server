@@ -100,7 +100,7 @@ class CustomRequestHandler(http.server.SimpleHTTPRequestHandler):
             logging.error(f"429: Too many GET requests, sender: {self.client_address}, path: {self.path}")
             return
         if len(self.path) > self.MAX_GET_URL_LENGTH:
-            self.send_error(414, "URI Too Long")
+            self.send_error(414, "URL Too Long")
             logging.error(f"414: URL Too Long, sender: {self.client_address}, path: {self.path}")
             self.end_headers()
             return

@@ -1,9 +1,8 @@
 import requests
 import time
-import os
+import urllib3
 
-PARENT_DIR = os.path.abspath(os.path.join(os.getcwd(), os.pardir))
-KEY_PATH = os.path.join(PARENT_DIR, 'certificates', 'key.pem')   
+urllib3.disable_warnings() 
 
 def measure_request_time(url):
     start_time = time.time()
