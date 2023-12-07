@@ -10,12 +10,11 @@ response_cnt[429] = 0
 urllib3.disable_warnings()
 
 def send_request(url):
-    # Replace with the actual logic for sending a request
     response = requests.get(url, verify=False)
     return response.status_code
 
 def main():
-    url = "https://localhost:8000"  # Replace with your server's URL
+    url = "https://localhost:8000"
     requests_count = 10
 
     with ProcessPoolExecutor() as executor:
@@ -35,7 +34,7 @@ def main():
         except AssertionError:
             print("Bug in rate limit concurrency control!")
             return
-        print("Tests passed!")
+        print("Tests passed, rate limit control behaves as expected")
 
 if __name__ == "__main__":
     main()
